@@ -1,0 +1,495 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Festival Live Monitoring System</title>
+
+<!-- Map library -->
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+/* CSS: Dashboard design */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+header {
+  background: linear-gradient(120deg, #172554, #1d4ed8);
+  color: white;
+  padding: 25px 15px;
+  text-align: center;
+}
+
+header h1 { margin: 0 0 10px; }
+
+main {
+  max-width: 1200px;
+  margin: auto;
+  padding: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px #0000000c;
+}
+
+h2 {
+  color: #1d4ed8;
+  font-size: 19px;
+}
+
+.metric {
+  font-size: 28px;
+  font-weight: bold;
+  margin: 12px 0;
+}
+
+label { display: block; margin-top: 10px; }
+
+input {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+button {
+  background: #2563eb;
+  color: white;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+button:hover { background: #1e40af; }
+
+.item {
+  padding: 10px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tag {
+  font-size: 12px;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+
+.note {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+#map {
+  height: 350px;
+  border-radius: 10px;
+  margin-top: 12px;
+}
+
+footer {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+}
+
+@media(max-width: 600px) {
+  main { padding: 12px; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>🎉 Festival Live Monitoring</h1>
+  <p>Festival Timings | Weather | Bus Tracking | Crowd Counts</p>
+  <p id="clock">Loading time...</p>
+</header>
+
+<main>
+  <div class="grid">
+
+    <!-- Weather -->
+    <section class="card">
+      <h2>🌦 Weather Update</h2>
+      <div id="temperature" class="metric">Loading...</div>
+      <p id="conditions">Getting weather information...</p>
+      <p id="weatherInfo" class="note"></p>
+      <button onclick="loadWeather()">Refresh Weather</button>
+    </section>
+
+    <!-- Festival schedule -->
+    <section class="card">
+      <h2>🛕 Festival Timings</h2>
+
+      <label for="festival">Festival name</label>
+      <input id="festival" value="Chithirai Thiruvila">
+
+      <label for="event">Event name</label>
+      <input id="event" value="Maha Pooja & Procession">
+
+      <label for="eventTime">Event date and time</label>
+      <input id="eventTime" type="datetime-local">
+
+      <label for="locationSelect">Festival location</label>
+      <select id="locationSelect" style="width:100%; padding:10px; margin-top:5px; border:1px solid #cbd5e1; border-radius:6px;">
+        <option value="Meenakshi Amman Temple">Meenakshi Amman Temple</option>
+        <option value="Vandiyur Mariamman Teppakulam">Vandiyur Mariamman Teppakulam</option>
+        <option value="Thiruparankundram Murugan Temple">Thiruparankundram Murugan Temple</option>
+        <option value="Alagar Kovil">Alagar Kovil</option>
+        <option value="Madurai Railway Junction">Madurai Railway Junction</option>
+      </select>
+
+      <button onclick="updateSchedule()">Set Event</button>
+      <div id="schedule"></div>
+    </section>
+
+    <!-- Bus information -->
+    <section class="card">
+      <h2>🚌 Bus Locations</h2>
+      <span class="tag">SAMPLE DATA</span>
+      <div id="busList"></div>
+      <p class="note">
+        Bus coordinates are examples, not live GPS readings.
+      </p>
+    </section>
+
+    <!-- Crowd monitoring -->
+    <section class="card">
+      <h2>👥 Crowd Monitoring</h2>
+      <span class="tag">SAMPLE DATA</span>
+      <div id="crowdList"></div>
+      <div id="totalCrowd" class="metric"></div>
+      <p class="note">
+        Counts are simulated and must not be used for safety decisions.
+      </p>
+    </section>
+
+    <!-- Scenario planning -->
+    <section class="card">
+      <h2>🚨 Exit Planning Scenario</h2>
+      <div id="scenarioSummary"></div>
+      <button onclick="runScenarioPlan()">Run Planning Model</button>
+      <div id="scenarioResult" class="note"></div>
+    </section>
+  </div>
+
+  <!-- Map -->
+  <section class="card" style="margin-top:20px">
+    <h2>📍 Festival and Bus Map</h2>
+    <p class="note">
+      Festival route map centered on Madurai district. Markers show the main locations.
+    </p>
+    <div id="map"></div>
+  </section>
+</main>
+
+<footer>Festival Live Monitoring System | Frontend Demo</footer>
+
+<!-- JavaScript map library -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// 1. CLOCK
+function updateClock() {
+  document.getElementById("clock").textContent =
+    new Date().toLocaleString();
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+
+// 2. LIVE WEATHER
+// Example coordinates: Coimbatore.
+// Change these for your festival location.
+const latitude = 9.9252;
+const longitude = 78.1198;
+
+async function loadWeather() {
+  document.getElementById("temperature").textContent = "Loading...";
+
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}` +
+      `&longitude=${longitude}` +
+      "&current=temperature_2m,relative_humidity_2m," +
+      "precipitation,weather_code,wind_speed_10m&timezone=auto";
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Weather request failed");
+
+    const result = await response.json();
+    const weather = result.current;
+
+    const descriptions = {
+      0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy",
+      3: "Overcast", 45: "Fog", 48: "Fog",
+      51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
+      61: "Light rain", 63: "Moderate rain", 65: "Heavy rain",
+      80: "Rain showers", 81: "Rain showers",
+      82: "Heavy showers", 95: "Thunderstorm"
+    };
+
+    document.getElementById("temperature").textContent =
+      weather.temperature_2m + " °C";
+
+    document.getElementById("conditions").textContent =
+      descriptions[weather.weather_code] || "Weather code " +
+      weather.weather_code;
+
+    document.getElementById("weatherInfo").textContent =
+      `Humidity: ${weather.relative_humidity_2m}% | ` +
+      `Rain: ${weather.precipitation} mm | ` +
+      `Wind: ${weather.wind_speed_10m} km/h`;
+  } catch (error) {
+    document.getElementById("temperature").textContent = "Unavailable";
+    document.getElementById("conditions").textContent =
+      "Check your internet connection and refresh.";
+  }
+}
+loadWeather();
+
+
+// 3. FESTIVAL SCHEDULE
+let countdownTimer;
+
+function updateSchedule() {
+  const festival = document.getElementById("festival").value.trim();
+  const event = document.getElementById("event").value.trim();
+  const time = document.getElementById("eventTime").value;
+  const selectedLocation = document.getElementById("locationSelect").value;
+
+  if (!festival || !event || !time) {
+    alert("Enter the festival name, event name, and date/time.");
+    return;
+  }
+
+  const eventDate = new Date(time);
+
+  if (Number.isNaN(eventDate.getTime())) {
+    alert("Please enter a valid date and time.");
+    return;
+  }
+
+  document.getElementById("schedule").innerHTML = "";
+
+  const title = document.createElement("p");
+  title.textContent = festival;
+  title.style.fontWeight = "bold";
+
+  const details = document.createElement("p");
+  details.textContent = event + ": " + eventDate.toLocaleString();
+
+  const locationLine = document.createElement("p");
+  locationLine.textContent = "Location: " + selectedLocation;
+
+  const countdown = document.createElement("p");
+
+  document.getElementById("schedule").append(
+    title, details, locationLine, countdown
+  );
+
+  clearInterval(countdownTimer);
+
+  function tick() {
+    const diff = eventDate.getTime() - Date.now();
+
+    if (diff <= 0) {
+      countdown.textContent = "Event time reached or has passed.";
+      clearInterval(countdownTimer);
+      return;
+    }
+
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    countdown.textContent =
+      `Countdown: ${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  tick();
+  countdownTimer = setInterval(tick, 1000);
+}
+
+// Leave the inputs blank so the user can type their own values.
+document.getElementById("festival").value = "";
+document.getElementById("event").value = "";
+document.getElementById("eventTime").value = "";
+
+
+// 4. SAMPLE BUS DATA
+const buses = [
+  { number: "LOC 01", stop: "Meenakshi Amman Temple", lat: 9.9197, lon: 78.1191 },
+  { number: "LOC 02", stop: "Vandiyur Mariamman Teppakulam", lat: 9.9206, lon: 78.1232 },
+  { number: "LOC 03", stop: "Thiruparankundram Murugan Temple", lat: 9.8926, lon: 78.0825 },
+  { number: "LOC 04", stop: "Alagar Kovil", lat: 10.0840, lon: 78.1968 },
+  { number: "LOC 05", stop: "Madurai Railway Junction", lat: 9.9193, lon: 78.1331 }
+];
+
+document.getElementById("busList").innerHTML = buses.map(bus =>
+  `<div class="item"><strong>${bus.number}</strong><br>
+  Stop: ${bus.stop}<br>
+  <span class="note">${bus.lat}, ${bus.lon}</span></div>`
+).join("");
+
+
+// 5. SAMPLE CROWD DATA
+const zones = [
+  { name: "Main Gate", people: 350, capacity: 1000 },
+  { name: "Temple Area", people: 820, capacity: 1000 },
+  { name: "Bus Stand", people: 190, capacity: 600 },
+  { name: "Stage 1", people: 420, capacity: 900 },
+  { name: "Stage 2", people: 610, capacity: 900 },
+  { name: "Food Court", people: 540, capacity: 850 },
+  { name: "Prayer Hall", people: 280, capacity: 700 },
+  { name: "Parking Zone", people: 160, capacity: 500 },
+  { name: "Info Desk", people: 110, capacity: 400 },
+  { name: "Lake Area", people: 390, capacity: 700 },
+  { name: "Children Zone", people: 260, capacity: 600 },
+  { name: "Medical Point", people: 90, capacity: 300 },
+  { name: "Cultural Hall", people: 470, capacity: 800 },
+  { name: "Temple Lawn", people: 700, capacity: 950 },
+  { name: "Night Market", people: 340, capacity: 650 },
+  { name: "Souvenir Stall", people: 220, capacity: 500 },
+  { name: "Security Check", people: 140, capacity: 400 },
+  { name: "Annadanam", people: 660, capacity: 1000 }
+];
+
+document.getElementById("crowdList").innerHTML = zones.map(zone => {
+  const percent = Math.round(zone.people / zone.capacity * 100);
+  const level = percent >= 80 ? "High" :
+                percent >= 50 ? "Medium" : "Low";
+
+  return `<div class="item">
+    <strong>${zone.name}</strong><br>
+    ${zone.people} people — ${level}<br>
+    <progress value="${Math.min(percent, 100)}" max="100"
+      style="width:100%"></progress>
+    <span class="note">${percent}% of example capacity</span>
+  </div>`;
+}).join("");
+
+document.getElementById("totalCrowd").textContent =
+  zones.reduce((sum, zone) => sum + zone.people, 0) +
+  " (sample people count)";
+
+
+// 6. SCENARIO: FESTIVAL EVACUATION PLANNING
+const evacuationScenario = {
+  totalPeople: 40000,
+  exitWindowMinutes: 120,
+  mainBusStandBuses: 12,
+  backupStopBuses: 4,
+  backupDistanceKm: 2,
+  dangerMinutes: 30,
+  busSeats: 50,
+  weatherKnown: true,
+  scheduleKnown: true,
+  eventEndKnown: true
+};
+
+function runScenarioPlan() {
+  const peoplePerMinute = evacuationScenario.totalPeople /
+    evacuationScenario.exitWindowMinutes;
+  const peoplePerBus = evacuationScenario.busSeats;
+  const mainBusCapacity = evacuationScenario.mainBusStandBuses * peoplePerBus;
+  const backupBusCapacity = evacuationScenario.backupStopBuses * peoplePerBus;
+  const totalBusCapacity = mainBusCapacity + backupBusCapacity;
+  const crowdRiskPercent = Math.min(100,
+    Math.round((evacuationScenario.totalPeople / totalBusCapacity) * 100));
+  const transferableCrowd = Math.round(evacuationScenario.totalPeople * 0.35);
+  const recommendedDispatch = Math.max(4,
+    Math.ceil((evacuationScenario.totalPeople / 120) / 150));
+
+  const summary = `
+    <div class="item">
+      <strong>Event Exit Demand</strong><br>
+      Around ${evacuationScenario.totalPeople.toLocaleString()} people need to leave within
+      ${evacuationScenario.exitWindowMinutes / 60} hours.
+    </div>
+    <div class="item">
+      <strong>Bus Availability</strong><br>
+      Main stand: ${evacuationScenario.mainBusStandBuses} buses<br>
+      Nearby stop: ${evacuationScenario.backupStopBuses} buses<br>
+      Total bus seats available: ${totalBusCapacity.toLocaleString()}
+    </div>
+    <div class="item">
+      <strong>Risk Trigger</strong><br>
+      Main stand becomes overcrowded in ${evacuationScenario.dangerMinutes} minutes.
+      The crowd surge is predictable and can be managed earlier.
+    </div>
+  `;
+
+  const result = `
+    <strong>Planning insight:</strong><br>
+    The real issue is not only vehicle shortage. The schedule, event ending time and weather
+    forecast were known a week in advance, so officials could have predicted a peak departure of
+    about <strong>${peoplePerMinute.toFixed(1)} people/minute</strong> and directed
+    passengers to the nearby stop <strong>${evacuationScenario.backupDistanceKm} km away</strong> before crowding started.<br><br>
+
+    <strong>Why this was a coordination problem:</strong><br>
+    - Main stand had only ${evacuationScenario.mainBusStandBuses} scheduled buses.<br>
+    - Nearby stop had ${evacuationScenario.backupStopBuses} buses with spare capacity.<br>
+    - A short diversion of about <strong>${transferableCrowd.toLocaleString()}</strong> passengers could have reduced the danger at the main stand.<br>
+    - A dynamic dispatch plan, based on forecasted exit demand, would have prevented the crisis.<br><br>
+
+    <strong>Recommended action:</strong><br>
+    Dispatch early buses from the nearby stop, notify riders through announcements and digital boards,
+    and use real-time crowd counts so that the crowd is split before the 30-minute danger level is reached.<br>
+    <span class="tag">Hint 1: the information was available in advance, but not used effectively.</span>
+  `;
+
+  document.getElementById("scenarioSummary").innerHTML = summary;
+  document.getElementById("scenarioResult").innerHTML = result;
+}
+
+runScenarioPlan();
+
+
+// 6. MAP AND BUS MARKERS
+const festivalCenter = [9.9252, 78.1198];
+const map = L.map("map").setView(festivalCenter, 11);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors",
+  maxZoom: 19
+}).addTo(map);
+
+L.marker(festivalCenter)
+  .addTo(map)
+  .bindPopup("Festival Zone Center");
+
+buses.forEach(bus => {
+  L.marker([bus.lat, bus.lon])
+    .addTo(map)
+    .bindPopup(bus.number + " — " + bus.stop);
+});
+
+const bounds = L.latLngBounds(buses.map(bus => [bus.lat, bus.lon]));
+map.fitBounds(bounds.pad(0.35));
+</script>
+
+</body>
+</html>
